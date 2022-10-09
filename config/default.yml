@@ -1,0 +1,6 @@
+url: https://example.com.ar/
+apiKey: ck_apiKey
+apiSecret: cs_apiSecret
+school: Example
+stockUrl: http://example.com.ar
+schedule: 3600000
