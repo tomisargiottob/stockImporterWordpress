@@ -54,10 +54,12 @@ async function updateStock() {
 	for (const product of storeProducts) {
 		if (product.sku) {
 			memoryProducts[product.sku] = product.id;
-			const { data: variations } = await WooCommerce.get(`products/${product.id}/variations?sku=${productVariation[product.sku].join(',')}`,{per_page:100});
-			variations.forEach((variation) => {
-				memoryProducts[variation.sku] = variation.id;
-			})
+			if(productVariation[product.sku]) {
+				const { data: variations } = await WooCommerce.get(`products/${product.id}/variations?sku=${productVariation[product.sku].join(',')}`,{per_page:100});
+				variations.forEach((variation) => {
+					memoryProducts[variation.sku] = variation.id;
+				})
+			}
 		}
 	}
 	const batchVariationUpdate = {};
@@ -107,7 +109,7 @@ async function updateStock() {
 	const updatedVariations = await Promise.all(updatePromises);
 	logger.info('Successfully updated products');
 	await fs.writeFile('./storeProducts.json',JSON.stringify(memoryProducts));
-	setTimeout(updateStock, config.shcedule)
+	setTimeout(updateStock, config.schedule)
 }
 
 updateStock();
