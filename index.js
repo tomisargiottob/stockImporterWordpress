@@ -2,7 +2,9 @@ const WooCommerceRestApi = require('@woocommerce/woocommerce-rest-api').default;
 const errors = require('common-errors')
 const xml2js = require('xml2js');
 const config = require('config');
-const logger = require('pino')()
+const logger = require('pino')({
+	timestamp: () => `,"time":"${new Date(Date.now()).toISOString()}"`
+})
 const fs = require('fs/promises');
 
 const stockUrl = config.stockApi;
@@ -30,21 +32,23 @@ async function updateStock() {
 	const schoolProducts = parsedData.vdato.productosweb;
 	const products = schoolProducts.filter((product) => product.FAMILIA === config.school);
 	log.info(`Products from ${config.school} have been filtered`);
-	const memory = await fs.readFile('./storeProducts.json');
-	const memoryProducts = JSON.parse(memory.toString())
+	// const memory = await fs.readFile('./storeProducts.json');
+	// const memoryProducts = JSON.parse(memory.toString())
+	const memoryProducts = {};
 	log.info('Searching products in woocommerce API');
 
 	const { missingProducts, productVariation, updatableItems } = products.reduce((uniqueProducts, product) => {
 		const productDescomposition = product['ARTICULO__ID'].match(skuRegex);
-		if(!memoryProducts[productDescomposition[1]]) {
-			uniqueProducts.missingProducts.add(productDescomposition[1])
+		const parentId = config.exeptions[productDescomposition[1]] || productDescomposition[1]
+		if(!memoryProducts[parentId]) {
+			uniqueProducts.missingProducts.add(parentId)
 		}
 		if(productDescomposition[2]) {
 			if (!memoryProducts[product['ARTICULO__ID']]) {
-				if(!uniqueProducts.productVariation[productDescomposition[1]]){
-					uniqueProducts.productVariation[productDescomposition[1]] = [];
+				if(!uniqueProducts.productVariation[parentId]){
+					uniqueProducts.productVariation[parentId] = [];
 				}
-				uniqueProducts.productVariation[productDescomposition[1]].push(product['ARTICULO__ID'])
+				uniqueProducts.productVariation[parentId].push(product['ARTICULO__ID'])
 			}
 		}
 		uniqueProducts.updatableItems[product['ARTICULO__ID']] = product;
@@ -68,21 +72,22 @@ async function updateStock() {
 	for (const product of Object.keys(updatableItems)) {
 		if (memoryProducts[product]) {
 			const productDescomposition = product.match(skuRegex);
+			const parentId = config.exeptions[productDescomposition[1]] || productDescomposition[1]
 			if(productDescomposition[2]) {
-				if(!batchVariationUpdate[productDescomposition[1]]) {
-					batchVariationUpdate[productDescomposition[1]] = []
+				if(!batchVariationUpdate[parentId]) {
+					batchVariationUpdate[parentId] = []
 				}
-				batchVariationUpdate[productDescomposition[1]].push({
+				batchVariationUpdate[parentId].push({
 					id: memoryProducts[product],
 					regular_price: +updatableItems[product].PRECIOVENTA,
 					manage_stock: true,
 					stock_quantity:  updatableItems[product].STOCK,
 				})
-			} else {
+			} else if (!config.exeptions[productDescomposition[1]]){
 				batchUpdate.push({
 					id: memoryProducts[product],
 					regular_price: +updatableItems[product].PRECIOVENTA,
-					manage_stock: true,
+					manage_stock: false,
 					stock_quantity:  updatableItems[product].STOCK,
 				})
 			}	
@@ -95,7 +100,6 @@ async function updateStock() {
 	const updatedProducts = await WooCommerce.post('products/batch',{update: batchUpdate});
 	
 	log.info('Updating variation products');
-
 	const updatePromises = Object.keys(batchVariationUpdate).map(async (parent) => {
 		try {
 			await WooCommerce.post(`products/${memoryProducts[parent]}/variations/batch`,{update: batchVariationUpdate[parent]})
@@ -112,4 +116,14 @@ async function updateStock() {
 	setTimeout(updateStock, config.schedule)
 }
 
-updateStock();
+async function renewDatabase(){
+	await fs.writeFile('./storeProducts.json',JSON.stringify({}));
+	setTimeout(renewDatabase, config.scheduleDatabaseRenewal);
+}
+
+async function main() {
+	await renewDatabase();
+	await updateStock();
+}
+
+main();
