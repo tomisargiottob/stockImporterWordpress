@@ -32,9 +32,9 @@ async function updateStock() {
 	const schoolProducts = parsedData.vdato.productosweb;
 	const products = schoolProducts.filter((product) => product.FAMILIA === config.school);
 	log.info(`Products from ${config.school} have been filtered`);
-	// const memory = await fs.readFile('./storeProducts.json');
-	// const memoryProducts = JSON.parse(memory.toString())
-	const memoryProducts = {};
+	const memory = await fs.readFile('./storeProducts.json');
+	const memoryProducts = JSON.parse(memory.toString())
+	// const memoryProducts = {};
 	log.info('Searching products in woocommerce API');
 
 	const { missingProducts, productVariation, updatableItems } = products.reduce((uniqueProducts, product) => {
